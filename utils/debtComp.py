@@ -67,9 +67,12 @@ class debtComp(snxContracts):
         
         #other formatting
         df["synth"] = df.index
+        df["market cap"]  = df["market cap"].astype(float)
+        df["debt pool %"] = df["debt pool %"].astype(float)
         df["market cap (sUSD millions)"] = df["market cap"]
         df = df[['synth','market cap (sUSD millions)','debt pool %']]
         df.sort_values(by=['debt pool %'],inplace=True,ascending=False)
+        
 
         return df
                 
