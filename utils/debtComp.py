@@ -2,16 +2,13 @@ from utils.snxContracts import snxContracts
 import numpy as np
 import time
 import pandas as pd
-from collections import namedtuple
 
 class debtComp(snxContracts):
     def __init__(self,conf,resolver):
         
         super().__init__(conf=conf,
                          resolver=resolver)
-        
-        self.dataPoint = namedtuple('point', ['timestamp','supply','shorts','eth_collateral','wrappr'])
-    
+            
     def startBot(self):
         while True:
             try:

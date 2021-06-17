@@ -1,4 +1,3 @@
-import web3 as W3
 from discord import Webhook, RequestsWebhookAdapter,Embed
 
 class discordBot():
