@@ -78,27 +78,17 @@ class debtComp(snxContracts):
                 
     def getSynthMarketCap(self):
         #get synth list
-        snxContract       = self.getContract('Synthetix')
-        synthListHex      = snxContract.functions.availableCurrencyKeys().call()
-        synthList         = [synth.decode().replace('\x00','') for synth in synthListHex]
-        synthDF           = pd.DataFrame(synthList,columns=['synth'])
-        synthDF["supply"] = synthDF["synth"].apply(self.getSynthSupply)
-        synthDF["price"]  = self.getSynthPrices(synthListHex)
-        synthDF["price"]  = synthDF["price"]  / 1e18
+        utilsContract     = self.getContract('SynthUtil')
+        synthSupplyList   = utilsContract.functions.synthsTotalSupplies().call()
+        synthDF           = pd.DataFrame(synthSupplyList).T
+        synthDF.columns   = columns=['synthHex','supply','market cap']
+        synthDF["synth"]  = synthDF["synthHex"].str.decode('utf-8').str.replace('\x00','')
+        synthDF           = synthDF.query("supply > 0").copy()
+        synthDF["price"]  = synthDF["market cap"] / synthDF["supply"]
+        synthDF["market cap"] = synthDF["market cap"] / 1e24
+        synthDF["supply"]     = synthDF["supply"] / 1e24
         return synthDF
-        
-    def getSynthSupply(self,synth):
-        if synth == 'sUSD':
-            contract = self.getContract(contractName = 'ProxyERC20sUSD')
-        else:
-            contract = self.getContract(contractName = f'Proxy{synth}')
-
-        return contract.functions.totalSupply().call() / 1e24
-
-    def getSynthPrices(self,synthListHex):
-        contract = self.getContract(contractName = 'ExchangeRates')
-        return contract.functions.ratesForCurrencies(synthListHex).call()
-    
+            
     def getWrapprETH(self):
         contract = self.getContract(contractName = 'EtherWrapper')
         return contract.functions.sETHIssued().call() / 1e24
