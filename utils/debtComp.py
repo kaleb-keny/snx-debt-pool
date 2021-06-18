@@ -49,7 +49,7 @@ class debtComp(snxContracts):
         multiUSD    =   self.getMultiCollateralIssuance(currencyKey='sUSD')
         oldLoanUSD  = self.getOldLoansUSD()
         wrapprUSD   = self.getWrapprUSD()
-        df.loc['sUSD','supply'] = df.loc['sBTC','supply'] - multiUSD - wrapprUSD - oldLoanUSD
+        df.loc['sUSD','supply'] = df.loc['sUSD','supply'] - multiUSD - wrapprUSD - oldLoanUSD
         
         #compute market cap
         df["market cap"]     = df["price"] * df["supply"]
