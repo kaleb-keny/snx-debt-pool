@@ -36,15 +36,20 @@ class debtComp(snxContracts):
         df.set_index(keys=['synth'],inplace=True)
 
         #remove short and borrows of eth
-        shortsETH  = self.getShorts(currencyKey='sETH')
-        borrowsETH = self.getLoansETH()
-        wrappr     = self.getWrapprETH()
-        df.loc['sETH','supply'] = df.loc['sETH','supply'] - shortsETH - borrowsETH - wrappr
+        multiETH   = self.getMultiCollateralIssuance(currencyKey='sETH')
+        oldLoanETH = self.getOldLoansETH()
+        wrapprETH  = self.getWrapprETH()
+        df.loc['sETH','supply'] = df.loc['sETH','supply'] - multiETH - wrapprETH - oldLoanETH
 
         #remove short and borrows of btc
-        shortsBTC  = self.getShorts(currencyKey='sBTC')
-        borrowsBTC = self.getLoansBTC()
-        df.loc['sBTC','supply'] = df.loc['sBTC','supply'] - shortsBTC - borrowsBTC
+        multiBTC  = self.getMultiCollateralIssuance(currencyKey='sBTC')
+        df.loc['sBTC','supply'] = df.loc['sBTC','supply'] - multiBTC
+
+        #remove borrows of usd and wrappr sUSD
+        multiUSD    =   self.getMultiCollateralIssuance(currencyKey='sUSD')
+        oldLoanUSD  = self.getOldLoansUSD()
+        wrapprUSD   = self.getWrapprUSD()
+        df.loc['sUSD','supply'] = df.loc['sBTC','supply'] - multiUSD - wrapprUSD - oldLoanUSD
         
         #compute market cap
         df["market cap"]     = df["price"] * df["supply"]
@@ -54,8 +59,7 @@ class debtComp(snxContracts):
         
         #update ETH to short ETH if it's negative
         if df.loc["sETH","market cap"] < 0:
-            df.rename(index={'sETH':'Short sETH'},inplace=True)
-                    
+            df.rename(index={'sETH':'Short sETH'},inplace=True)            
 
         #Group small things
         df = df[df["debt pool %"] >= 0.05]
@@ -69,7 +73,6 @@ class debtComp(snxContracts):
         df["market cap (sUSD millions)"] = df["market cap"]
         df = df[['synth','market cap (sUSD millions)','debt pool %']]
         df.sort_values(by=['debt pool %'],inplace=True,ascending=False)
-        
 
         return df
                 
@@ -100,26 +103,24 @@ class debtComp(snxContracts):
         contract = self.getContract(contractName = 'EtherWrapper')
         return contract.functions.sETHIssued().call() / 1e24
     
-    def getShorts(self,currencyKey):
+    def getWrapprUSD(self):
+        contract = self.getContract(contractName = 'EtherWrapper')
+        return contract.functions.sUSDIssued().call() / 1e24
+
+    def getMultiCollateralIssuance(self,currencyKey):
         contract = self.getContract(contractName = 'CollateralManagerState')
         currency = self.w3.toHex(text=f'{currencyKey}')
         longs, shorts = contract.functions.totalIssuedSynths(currency).call()
-        return shorts/1e24
+        return (longs + shorts)/1e24
     
-    def getLoansETH(self):
-        contract = self.getContract(contractName = 'CollateralEth')
-        return self.w3.eth.getBalance(contract.address)/1e24
-
-    def getLoansBTC(self):
+    def getOldLoansETH(self):
+        contract = self.getContract(contractName = 'EtherCollateral')
+        return contract.functions.totalIssuedSynths().call() / 1e24
         
-        if not hasattr(self, 'ren'):
-            contract = self.getContract(contractName = 'CollateralErc20')
-            address  = contract.functions.underlyingContract().call()
-            abi      = self.getABI('0xe2d6cCAC3EE3A21AbF7BeDBE2E107FfC0C037e80')
-            self.ren = self.w3.eth.contract(address=address,
-                                            abi=abi)
-            
-        return self.ren.functions.balanceOf(self.contracts["CollateralErc20"]["address"]).call() / 1e14
+    def getOldLoansUSD(self):
+        contract = self.getContract(contractName = 'EtherCollateralsUSD')
+        return contract.functions.totalIssuedSynths().call() / 1e24
+
                     
 
 #%%
