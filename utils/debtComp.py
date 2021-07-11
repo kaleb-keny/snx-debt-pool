@@ -2,23 +2,39 @@ from utils.snxContracts import snxContracts
 import numpy as np
 import time
 import pandas as pd
+from collections import namedtuple
+from scipy.optimize import minimize
 
 class debtComp(snxContracts):
     def __init__(self,conf,resolver):
         
         super().__init__(conf=conf,
                          resolver=resolver)
-            
+        
+        self.leverage = namedtuple(typename='lvg', 
+                                   field_names=['synth',
+                                                'leverage',
+                                                'adjusted_debt_pool_percentage'])
+        
     def startBot(self):
         while True:
+
             try:
                 
-                df = self.gatherData()            
-                self.sendEmbed(title='Debt Pool Composition',
-                               description='Please note that negative market cap numbers means that the hedge requires a short position.',
-                               df=df)
+                df = self.gatherData()                            
+                dfLeveraged = self.getLeveragedAdjustedDF(df=df)
+                                
+                            
+                self.sendStandard(title='Debt Pool Composition',
+                                  description='Please note that negative market cap numbers means that the hedge requires a short position.',
+                                  df=df)
+
+                self.sendLeverage(title='Debt Pool Composition - Leverage Adjusted',
+                                  description='The below weights on non-stable synths can be used to mirror to debt pool and hedge against a 20% swing in prices.',
+                                  df=dfLeveraged)
+            
                 
-                time.sleep(60*60)
+                time.sleep(12*60*60)
                 
             except KeyboardInterrupt:
                 print("quitting")
@@ -26,8 +42,7 @@ class debtComp(snxContracts):
             
             except Exception as e:
                 print(f"Exception seen {e}")
-            
-    
+                
     def gatherData(self):
                                         
         df         = self.getSynthMarketCap()
@@ -53,18 +68,10 @@ class debtComp(snxContracts):
         df["cap"]     = df["price"] * df["supply"]
         marketCapAbs = np.abs(df["cap"]).sum()
         df["debt_pool_percentage"] = np.abs(df["cap"] / marketCapAbs)
-        otherDF = df[df["debt_pool_percentage"] < 0.05].sum()
         
         #update ETH to short ETH if it's negative
         if df.loc["sETH","cap"] < 0:
             df.rename(index={'sETH':'Short sETH'},inplace=True)            
-
-        #Group small things
-        df = df[df["debt_pool_percentage"] >= 0.05]
-        df.loc['other','cap']                  = otherDF["cap"]
-        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
-        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
-        df.loc['other','supply']               = 0
         
         #other formatting
         df["synth"]       = df.index
@@ -72,11 +79,71 @@ class debtComp(snxContracts):
                   inplace=True)
         df["cap"]  = df["cap"].astype(float)
         df["debt_pool_percentage"] = df["debt_pool_percentage"].astype(float)
-        df = df[['synth','units','cap','debt_pool_percentage']]
         df.sort_values(by=['debt_pool_percentage'],inplace=True,ascending=False)
 
         return df
+    
+    
+    def getLeveragedAdjustedDF(self,df):
+        
+        breakCounter = 1
+        resultList   = list()
+        
+        #run on a number of shocks
+        shockList = np.linspace(-0.2,0.2,20)
+        
+        #assume nothing changes
+        df["shockedPrice"]  = df["price"]
+        
+        #save it in memory for the optimizer
+        self.df = df.copy()
+        
+        for synth, data in df.iterrows():
+            if not synth in ['sUSD','sEUR','other']:
+                leverage = 0
+                #shock the price
+                for shock in shockList:
+                    #get the leverage
+                    result = minimize(fun=self.netDebt,
+                                      args=[df,synth,shock],
+                                      method='SLSQP',
+                                      x0=1.1)
+                    
+                    leverage += result.x[0] / len(shockList)
                 
+                #save the result
+                resultList.append(self.leverage(synth=synth,
+                                                leverage=leverage,
+                                                adjusted_debt_pool_percentage=data.debt_pool_percentage*leverage))
+                
+                breakCounter += 1
+                    
+                if breakCounter ==5 :
+                    break
+        return pd.DataFrame(resultList)
+
+    def netDebt(self,leverage,args):
+                
+        df, synth,shock = args
+        
+        #update price of shocked synth
+        df.loc[synth,"shockedPrice"] = df.loc[synth,"price"] * (1+shock)
+        
+        #get shocked new cap
+        df["shockedCap"]             = df["units"] * df["shockedPrice"]
+        
+        #get shocked debt pool percentage (representing 1$ being invested) or a users' that mirrors debt pool synth
+        df["shocked_user_synth"] = df["debt_pool_percentage"] * \
+                                        df.apply(lambda x: x.shockedPrice / x.price if x.units > 0 else 2 - x.shockedPrice / x.price, axis=1) * \
+                                            leverage
+
+        #get user's shocked debt & synths
+        debt  = df["shockedCap"].sum() / df["cap"].sum()
+        synth = df["shocked_user_synth"].sum()
+                
+        return abs(synth - debt)
+        
+                            
     def getSynthMarketCap(self):
         #get synth list
         utilsContract     = self.getContract('SynthUtil')

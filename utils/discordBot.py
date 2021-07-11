@@ -7,14 +7,23 @@ class discordBot():
         self.hook = conf["discord"]
 
 
-    def sendEmbed(self,description,df,title=None):
+    def sendStandard(self,description,df,title=None):
+
+        #Group small things
+        otherDF = df[df["debt_pool_percentage"] < 0.05].sum()
+        df = df[df["debt_pool_percentage"] >= 0.05]
+        df.loc['other','cap']                  = otherDF["cap"]
+        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
+        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
+        df.loc['other','supply']               = 0
+        df = df[['synth','units','cap','debt_pool_percentage']].copy()
         
         webhook = Webhook.from_url(self.hook, adapter=RequestsWebhookAdapter())
         e = Embed(title=title, description=description)
                 
         #shoot the synth
         valueString  = ''
-        for value in df["synth"]:
+        for value in df.index:
             valueString =  valueString +  "\n" + value
 
         e.add_field(name="target \n synth",
@@ -36,6 +45,34 @@ class discordBot():
             valueString =  valueString +  "\n" + str("{:.0%}".format(value))
 
         e.add_field(name="debt pool \n (%)", 
+                    value=valueString,
+                    inline=True)
+    
+        webhook.send(embed=e)
+
+    def sendLeverage(self,description,df,title=None):
+        
+        #filter large synths
+        df = df[df["adjusted_debt_pool_percentage"] > 0.05].copy()
+
+        webhook = Webhook.from_url(self.hook, adapter=RequestsWebhookAdapter())
+        e = Embed(title=title, description=description)
+                
+        #shoot the synth
+        valueString  = ''
+        for value in df["synth"]:
+            valueString =  valueString +  "\n" + value
+
+        e.add_field(name="target \n synth",
+                    value=valueString,
+                    inline=True)
+
+        #shoot debt pool percentage
+        valueString  = ''
+        for value in df["adjusted_debt_pool_percentage"]:
+            valueString =  valueString +  "\n" + str("{:.0%}".format(value))
+
+        e.add_field(name="leverage adjusted weights \n (%)", 
                     value=valueString,
                     inline=True)
     
