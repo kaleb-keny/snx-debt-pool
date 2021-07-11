@@ -27,8 +27,6 @@ class debtComp(snxContracts):
             except Exception as e:
                 print(f"Exception seen {e}")
             
-            
-    
     
     def gatherData(self):
                                         
@@ -52,27 +50,30 @@ class debtComp(snxContracts):
         df.loc['sUSD','supply'] = df.loc['sUSD','supply'] - multiUSD - wrapprUSD - oldLoanUSD
         
         #compute market cap
-        df["market cap"]     = df["price"] * df["supply"]
-        marketCapAbs = np.abs(df["market cap"]).sum()
-        df["debt pool %"] = np.abs(df["market cap"] / marketCapAbs)
-        otherDF = df[df["debt pool %"] < 0.05].sum()
+        df["cap"]     = df["price"] * df["supply"]
+        marketCapAbs = np.abs(df["cap"]).sum()
+        df["debt_pool_percentage"] = np.abs(df["cap"] / marketCapAbs)
+        otherDF = df[df["debt_pool_percentage"] < 0.05].sum()
         
         #update ETH to short ETH if it's negative
-        if df.loc["sETH","market cap"] < 0:
+        if df.loc["sETH","cap"] < 0:
             df.rename(index={'sETH':'Short sETH'},inplace=True)            
 
         #Group small things
-        df = df[df["debt pool %"] >= 0.05]
-        df.loc['other','market cap']  = otherDF["market cap"]
-        df.loc['other','debt pool %'] = otherDF["debt pool %"]
+        df = df[df["debt_pool_percentage"] >= 0.05]
+        df.loc['other','cap']                  = otherDF["cap"]
+        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
+        df.loc['other','debt_pool_percentage'] = otherDF["debt_pool_percentage"]
+        df.loc['other','supply']               = 0
         
         #other formatting
-        df["synth"] = df.index
-        df["market cap"]  = df["market cap"].astype(float)
-        df["debt pool %"] = df["debt pool %"].astype(float)
-        df["market cap (sUSD millions)"] = df["market cap"]
-        df = df[['synth','market cap (sUSD millions)','debt pool %']]
-        df.sort_values(by=['debt pool %'],inplace=True,ascending=False)
+        df["synth"]       = df.index
+        df.rename(columns={'supply':'units'},
+                  inplace=True)
+        df["cap"]  = df["cap"].astype(float)
+        df["debt_pool_percentage"] = df["debt_pool_percentage"].astype(float)
+        df = df[['synth','units','cap','debt_pool_percentage']]
+        df.sort_values(by=['debt_pool_percentage'],inplace=True,ascending=False)
 
         return df
                 
@@ -81,12 +82,12 @@ class debtComp(snxContracts):
         utilsContract     = self.getContract('SynthUtil')
         synthSupplyList   = utilsContract.functions.synthsTotalSupplies().call()
         synthDF           = pd.DataFrame(synthSupplyList).T
-        synthDF.columns   = columns=['synthHex','supply','market cap']
+        synthDF.columns   = columns=['synthHex','supply','cap']
         synthDF["synth"]  = synthDF["synthHex"].str.decode('utf-8').str.replace('\x00','')
         synthDF           = synthDF.query("supply > 0").copy()
-        synthDF["price"]  = synthDF["market cap"] / synthDF["supply"]
-        synthDF["market cap"] = synthDF["market cap"] / 1e24
-        synthDF["supply"]     = synthDF["supply"] / 1e24
+        synthDF["price"]  = synthDF["cap"] / synthDF["supply"]
+        synthDF["cap"]    = synthDF["cap"] / 1e24
+        synthDF["supply"] = synthDF["supply"] / 1e24
         return synthDF
             
     def getWrapprETH(self):

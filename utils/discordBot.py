@@ -11,31 +11,34 @@ class discordBot():
         
         webhook = Webhook.from_url(self.hook, adapter=RequestsWebhookAdapter())
         e = Embed(title=title, description=description)
-        
-        for fieldName in df.columns:
-
-            valueString  = ''
-
-            for value in df[fieldName]:
                 
-                if type(value) is float:
-                    
-                    if fieldName == 'debt pool %':
+        #shoot the synth
+        valueString  = ''
+        for value in df["synth"]:
+            valueString =  valueString +  "\n" + value
 
-                        valueString =  valueString +  "\n" + str("{:.0%}".format(value))
-                    
-                    else:
-                    
-                        valueString =  valueString +  "\n" + str("{:,}".format(round(value,2)))
-                
-                else:
-                    valueString =  valueString +  "\n" + value
+        e.add_field(name="target \n synth",
+                    value=valueString,
+                    inline=True)
 
-            e.add_field(name=fieldName, 
-                        value=valueString,
-                        inline=True)
+        #shoot the units and cap
+        valueString  = ''
+        for units, cap in zip(df["units"],df["cap"]):
+            valueString =  valueString +  "\n" + str("{:,}".format(round(cap,2))) + "/" + str("{:,}".format(round(units,5))) 
 
+        e.add_field(name="cap in dollars and units\n (millions)", 
+                    value=valueString,
+                    inline=True)
         
+        #shoot the units and cap
+        valueString  = ''
+        for value in df["debt_pool_percentage"]:
+            valueString =  valueString +  "\n" + str("{:.0%}".format(value))
+
+        e.add_field(name="debt pool \n (%)", 
+                    value=valueString,
+                    inline=True)
+    
         webhook.send(embed=e)
 
 #%%
