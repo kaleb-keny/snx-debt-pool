@@ -22,6 +22,7 @@ class debtComp(snxContracts):
             try:
                 
                 df = self.gatherData()                            
+
                 dfLeveraged = self.getLeveragedAdjustedDF(df=df)
                                 
                             
@@ -82,11 +83,13 @@ class debtComp(snxContracts):
         df.sort_values(by=['debt_pool_percentage'],inplace=True,ascending=False)
 
         return df
-    
-    
+        
     def getLeveragedAdjustedDF(self,df):
         
+        #used to exit after iterating on largest 5 synths
         breakCounter = 1
+        
+        #saves the results in a list
         resultList   = list()
         
         #run on a number of shocks
@@ -94,28 +97,25 @@ class debtComp(snxContracts):
         
         #assume nothing changes
         df["shockedPrice"]  = df["price"]
-        
-        #save it in memory for the optimizer
-        self.df = df.copy()
-        
+                
         for synth, data in df.iterrows():
             if not synth in ['sUSD','sEUR','other']:
                 leverage = 0
-                #shock the price
+                #lopp on shocks
                 for shock in shockList:
-                    #get the leverage
+                    #get the leverage from the optimization function
                     result = minimize(fun=self.netDebt,
                                       args=[df,synth,shock],
                                       method='SLSQP',
                                       x0=1.1)
-                    
+                    #average it
                     leverage += result.x[0] / len(shockList)
                 
-                #save the result
+                #save it
                 resultList.append(self.leverage(synth=synth,
                                                 leverage=leverage,
                                                 adjusted_debt_pool_percentage=data.debt_pool_percentage*leverage))
-                
+                #update counter
                 breakCounter += 1
                     
                 if breakCounter ==5 :
@@ -149,7 +149,7 @@ class debtComp(snxContracts):
         utilsContract     = self.getContract('SynthUtil')
         synthSupplyList   = utilsContract.functions.synthsTotalSupplies().call()
         synthDF           = pd.DataFrame(synthSupplyList).T
-        synthDF.columns   = columns=['synthHex','supply','cap']
+        synthDF.columns   = ['synthHex','supply','cap']
         synthDF["synth"]  = synthDF["synthHex"].str.decode('utf-8').str.replace('\x00','')
         synthDF           = synthDF.query("supply > 0").copy()
         synthDF["price"]  = synthDF["cap"] / synthDF["supply"]
@@ -180,7 +180,6 @@ class debtComp(snxContracts):
         return contract.functions.totalIssuedSynths().call() / 1e24
 
                     
-
 #%%
 if __name__ == '__main__':
     debt = debtComp(conf=conf,resolver=resolver)
